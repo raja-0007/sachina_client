@@ -1,65 +1,153 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { StatCards } from "@/components/StatCards";
+import { EmployeesClient } from "@/components/EmployeesClient";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+const DEFAULT_FILTERS = {
+  search: "",
+  department: "All",
+  status: "All",
+};
+
+const INITIAL_PAGE = 1;
+const INITIAL_PAGE_SIZE = 5;
+
+export default function DashboardPage() {
+  
+  const [stats, setStats] = useState({
+    total: 0,
+    totalDepartments: 0,
+    totalLocations: 0,
+    byDepartment: {},
+    byLocation: {},
+  });
+  
+  const [employees, setEmployees] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(INITIAL_PAGE);
+  const [pageSize, setPageSize] = useState(INITIAL_PAGE_SIZE);
+  const [totalPages, setTotalPages] = useState(0);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [loading, setLoading] = useState(true);
+  const [employeesLoading, setEmployeesLoading] = useState(true);
+  
+  const debounceRef = useRef();
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const statsRes = await fetch(`${API_URL}/employees/stats`, {
+        cache: 'no-store',
+      });
+      
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  }, []);
+
+  const fetchEmployees = useCallback(async (currentFilters, currentPage, currentPageSize) => {
+    setEmployeesLoading(true);
+
+    const params = new URLSearchParams({
+      page: String(currentPage),
+      limit: String(currentPageSize),
+      department: currentFilters.department,
+      status: currentFilters.status,
+      search: currentFilters.search,
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/employees?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const json = await res.json();
+      
+      setEmployees(json.data || []);
+      setTotal(json.total || 0);
+      setPage(json.page || 1);
+      setPageSize(currentPageSize);
+      setTotalPages(json.pages || 0);
+      setEmployeesLoading(false);
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+      setEmployeesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      await fetchStats();
+      setLoading(false);
+    };
+    
+    fetchData();
+  }, [fetchStats]);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    const delay = filters.search !== "" ? 300 : 0;
+    debounceRef.current = setTimeout(() => {
+      fetchEmployees(filters, page, pageSize);
+    }, delay);
+    return () => clearTimeout(debounceRef.current);
+  }, [filters, page, pageSize, fetchEmployees]);
+
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters(newFilters);
+    setPage(1);
+  }, []);
+
+  const handlePageChange = useCallback((newPage) => {
+    setPage(newPage);
+  }, []);
+
+  const handlePageSizeChange = useCallback((newPageSize) => {
+    setPageSize(newPageSize);
+    setPage(1);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <StatCards stats={stats} />
+
+      <div>
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-slate-900">Employees</h2>
+          <p className="text-sm text-slate-600 mt-0.5">
+            Manage your team — add, edit or remove members.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <EmployeesClient
+          employees={employees}
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          filters={filters}
+          loading={employeesLoading}
+          onFilterChange={handleFilterChange}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onDataChange={() => {
+            fetchStats();
+            fetchEmployees(filters, page, pageSize);
+          }}
+        />
+      </div>
     </div>
   );
 }
